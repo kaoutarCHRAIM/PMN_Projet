@@ -19,14 +19,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
-      - name: Install deps
+      - name: Install deps (incl. Scrapy)
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install -r requirements.txt
+          python -m pip install "scrapy==2.11.2"
 
       - name: Check Scrapy is installed
-        run: python -c "import sys, scrapy; print('Python:', sys.version); print('Scrapy:', scrapy.__version__)"
+        run: python -c "import sys, scrapy; print('Python:', sys.version); print('Exec:', sys.executable); print('Scrapy:', scrapy.__version__)"
 
       - name: Run spider → raw_data.json
         run: python -m scrapy runspider src/spider.py -O data/raw_data.json -s FEED_EXPORT_ENCODING=utf-8
