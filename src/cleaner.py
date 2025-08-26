@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os, json, pandas as pd
+import os, json, pandas as pd, re
 
 RAW = "data/raw_data.json"
 OUT = "data/cleaned_data.csv"
@@ -14,18 +14,60 @@ def in_idf(lat, lon):
     except Exception:
         return False
 
+def load_raw(path):
+    """Charge raw_data en gérant:
+       - JSON liste standard
+       - JSON Lines (une annonce par ligne)
+       - Plusieurs blocs JSON concaténés par erreur"""
+    if not os.path.exists(path):
+        return []
+    txt = open(path, "r", encoding="utf-8", errors="ignore").read().strip()
+    if not txt:
+        return []
+    # 1) Essayer JSON normal (liste)
+    try:
+        data = json.loads(txt)
+        if isinstance(data, dict) and "items" in data:
+            data = data["items"]
+        if isinstance(data, list):
+            return data
+    except Exception:
+        pass
+    # 2) Essayer JSON Lines
+    items = []
+    for line in txt.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+            if isinstance(obj, list):
+                items.extend(obj)
+            else:
+                items.append(obj)
+        except Exception:
+            continue
+    if items:
+        return items
+    # 3) “Réparer” un fichier concaténé: {..}{..} ou [..][..]
+    fixed = txt.replace('}\n{', '},{').replace('}{', '},{').replace('][', ',')
+    try:
+        data = json.loads(f"[{fixed}]")
+        if isinstance(data, list):
+            return data
+    except Exception:
+        pass
+    raise SystemExit("Impossible de parser data/raw_data.json (format corrompu). Supprime-le et relance le spider avec -O.")
+
 def main():
-    if not os.path.exists(RAW):
-        raise SystemExit("Missing data/raw_data.json. Run parse_local_html.py or fetch_ads.py first.")
-    with open(RAW, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = load_raw(RAW)
 
     rows = []
     for d in data:
         price = d.get("price")
         surface = d.get("surface_m2")
         lat = d.get("latitude"); lon = d.get("longitude")
-        if price is None or surface in (None, 0):
+        if price is None or surface in (None, 0, "", "0"):
             continue
 
         try:
@@ -34,7 +76,13 @@ def main():
         except Exception:
             continue
 
+        # --- ZIP: garder uniquement les chiffres, forcer 5 caractères ---
+        zip_raw = str(d.get("zipcode") or "")
+        zip_digits = re.sub(r"\D", "", zip_raw)   # enlève virgules, espaces, etc.
+        zipcode = zip_digits[:5] if len(zip_digits) >= 5 else None
+
         ok_geo = lat not in (None,"") and lon not in (None,"") and in_idf(lat, lon)
+
         rows.append({
             "title": d.get("title"),
             "price_eur": round(price, 2),
@@ -42,7 +90,7 @@ def main():
             "price_per_m2": round(price/surface, 2) if surface else None,
             "rooms": d.get("rooms"),
             "city": d.get("city"),
-            "zipcode": d.get("zipcode"),
+            "zipcode": zipcode,               # <-- string propre, sans virgule
             "latitude": float(lat) if ok_geo else None,
             "longitude": float(lon) if ok_geo else None,
             "url": d.get("url"),
