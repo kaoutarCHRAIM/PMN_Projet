@@ -3,7 +3,7 @@
 Seloger 20 URLs -> JSON (Scrapy)
 - Lit data/urls.txt (≤20 uniques)
 - Requêtes lentes (REQUEST_DELAY) pour rester prudent
-- Parse via JSON intégré aux pages (JSON-LD / __NEXT_DATA__), sans BeautifulSoup
+- Parse via JSON intégré aux pages (JSON-LD / __NEXT_DATA__)
 - Fallback HTML (meta/regex) + ville depuis l'URL si nécessaire
 - À lancer avec:
     scrapy runspider src/spider.py -O data/raw_data.json -s FEED_EXPORT_ENCODING=utf-8

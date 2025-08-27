@@ -1,4 +1,4 @@
-# Île-de-France – 20 annonces (SeLoger sans Piloterr)
+# Île-de-France – 20 annonces (SeLoger)
 
 Deux options **conformes et à faible volume** (pas d’anti-bot) :
 
