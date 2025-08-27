@@ -23,7 +23,7 @@ Deux options **conformes et à faible volume** (pas d’anti-bot) :
 2) Configure `.env` si besoin (`REQUEST_DELAY=2.5`).  
 3) Lance :  
    ```bash
-   python src/fetch_ads.py
+   python src/spider.py
    python src/cleaner.py
    streamlit run app.py
    ```
