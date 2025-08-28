@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import pydeck as pdk
-import pgeocode  # pgeocode==0.4.1 conseillé
+import pgeocode 
 
 st.set_page_config(page_title="Île-de-France • appartements (SeLoger)", layout="wide")
 st.title("🏙️ Île-de-France • appartements (SeLoger)")
