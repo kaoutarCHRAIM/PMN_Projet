@@ -2,7 +2,7 @@
 
 [![CI – Scrape & Clean](https://github.com/kaoutarCHRAIM/PMN_Projet/actions/workflows/main.yml/badge.svg)](https://github.com/kaoutarCHRAIM/PMN_Projet/actions)
 
-**App en ligne :** https://pmnprojet-jhnwwbmhocbpjq7mxbfgbv.streamlit.app/  
+**App en ligne :** https://pmnprojet-aqcouv52qt3k9bamgwkxgz.streamlit.app/  
 **Historique CI/CD :** https://github.com/kaoutarCHRAIM/PMN_Projet/actions  
 **Données à jour :** https://github.com/kaoutarCHRAIM/PMN_Projet/blob/master/data/cleaned_data.csv
 
@@ -46,7 +46,7 @@ L’application Streamlit permet :
 - Une carte pydeck avec points et labels k€.
 - Un tableau interactif avec liens directs vers les annonces.
 
-👉 **Lien URL** : https://pmnprojet-jhnwwbmhocbpjq7mxbfgbv.streamlit.app/
+👉 **Lien URL** : https://pmnprojet-aqcouv52qt3k9bamgwkxgz.streamlit.app/
 
 ---
 
