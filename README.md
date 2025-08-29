@@ -46,7 +46,7 @@ L’application Streamlit permet :
 - Une carte pydeck avec points et labels k€.
 - Un tableau interactif avec liens directs vers les annonces.
 
-👉 **Lien URL** : à compléter une fois l’app publiée.
+👉 **Lien URL** : https://pmnprojet-jhnwwbmhocbpjq7mxbfgbv.streamlit.app/
 
 ---
 

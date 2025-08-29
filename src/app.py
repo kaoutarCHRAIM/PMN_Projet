@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
-import os
 import math
+import hashlib
 import numpy as np
 import pandas as pd
 import streamlit as st
 import pydeck as pdk
-import pgeocode 
+import pgeocode  # requis dans requirements
+from pathlib import Path
 
 st.set_page_config(page_title="Île-de-France • appartements (SeLoger)", layout="wide")
 st.title("🏙️ Île-de-France • appartements (SeLoger)")
 
-DATA_PATH = "data/cleaned_data.csv"
-if not os.path.exists(DATA_PATH):
+# ---------- chemin robuste vers data/cleaned_data.csv ----------
+BASE_DIR = Path(__file__).resolve().parent.parent  # remonte de src/ vers la racine
+DATA_PATH = BASE_DIR / "data" / "cleaned_data.csv"
+if not DATA_PATH.exists():
     st.warning("Pas encore de données. Lance le scraping puis `python src/cleaner.py`.")
     st.stop()
 
@@ -25,7 +28,7 @@ for col in ["price_eur", "surface_m2", "price_per_m2", "latitude", "longitude", 
 # Zip code propre : 5 chiffres + une version str pour l'affichage
 if "zipcode" in df.columns:
     z = df["zipcode"].astype(str).fillna("")
-    z = z.str.replace(r"\D", "", regex=True).str[:5]
+    z = z.replace(r"\D", "", regex=True).str[:5]
     z = z.where(z.str.len() == 5, np.nan)
     df["zipcode"] = pd.to_numeric(z, errors="coerce")
     df["zipcode_str"] = z
@@ -34,7 +37,6 @@ else:
     df["zipcode_str"] = np.nan
 
 # ------------------ Compléter lat/lon par code postal ------------------
-# BBox Île-de-France (simple)
 LAT_MIN, LAT_MAX = 48.0, 49.3
 LON_MIN, LON_MAX = 1.45, 3.57
 
@@ -49,9 +51,11 @@ def in_idf(lat, lon):
     except Exception:
         return False
 
+# on marque les lignes sans coordonnées AVANT remplissage (pour savoir lesquelles viennent du CP)
 mask_missing = df["latitude"].isna() | df["longitude"].isna()
-cand = df.loc[mask_missing, "zipcode_str"].dropna().unique()
+df["_from_zip"] = mask_missing.copy()
 
+cand = df.loc[mask_missing, "zipcode_str"].dropna().unique()
 if cand.size > 0:
     nomi = pgeocode.Nominatim("fr")
     geo = nomi.query_postal_code(list(cand))
@@ -70,13 +74,49 @@ if cand.size > 0:
             key = str(row["zipcode_str"])
             if key in mapping:
                 lat, lon = mapping[key]
-                # on ne garde que si ça tombe en IDF
                 if pd.notna(lat) and pd.notna(lon) and in_idf(lat, lon):
                     row["latitude"]  = float(lat)
                     row["longitude"] = float(lon)
         return row
 
     df = df.apply(fill_row, axis=1)
+
+# ------------------ JITTER STABLE pour éviter les superpositions ------------------
+def jitter_stable(lat, lon, key, meters=120):
+    """
+    Décale (lat, lon) d'un petit rayon <= meters de manière déterministe selon `key`.
+    1° lat ≈ 111_111 m ; 1° lon ≈ 111_111 * cos(lat) m
+    """
+    try:
+        h = int(hashlib.sha1(str(key).encode("utf-8")).hexdigest(), 16)
+        angle = (h % 3600) / 3600.0 * 2 * math.pi
+        # rayon en mètres : entre 0.3*meters et 1.0*meters (évite un vrai 0)
+        radius = ((h // 3600) % 1000) / 1000.0
+        r = 0.3 * meters + 0.7 * meters * radius
+        dlat = r / 111_111.0 * math.cos(angle)
+        dlon = r / (111_111.0 * math.cos(math.radians(lat))) * math.sin(angle)
+        return lat + dlat, lon + dlon
+    except Exception:
+        return lat, lon
+
+# ne jitter que si : (1) coordonnées issues du CP ET (2) il y a >1 annonce sur ce CP
+if "_from_zip" in df.columns:
+    counts = (
+        df.loc[df["_from_zip"] & df["zipcode_str"].notna(), "zipcode_str"]
+          .map(df["zipcode_str"].value_counts())
+    )
+    df["_jitter_me"] = df["_from_zip"] & df["zipcode_str"].notna() & (counts > 1)
+
+    def add_jitter(row):
+        if bool(row.get("_jitter_me")) and pd.notna(row["latitude"]) and pd.notna(row["longitude"]):
+            key = row.get("url") or row.get("title") or row.name
+            row["latitude"], row["longitude"] = jitter_stable(row["latitude"], row["longitude"], key)
+        return row
+
+    df = df.apply(add_jitter, axis=1)
+
+# on nettoie les colonnes techniques
+df = df.drop(columns=["_from_zip", "_jitter_me"], errors="ignore")
 
 # ------------------ Filtres ------------------
 c1, c2, c3 = st.columns(3)
@@ -108,14 +148,12 @@ fdf = df[mask].copy()
 # ------------------ Carte ------------------
 st.subheader("🗺️ Carte")
 
-# garde uniquement les points avec coordonnées et en IDF
 gdf = (
     fdf.dropna(subset=["latitude", "longitude"])
        .loc[lambda d: d.apply(lambda r: in_idf(r["latitude"], r["longitude"]), axis=1)]
        .copy()
 )
 
-# libellé prix pour TextLayer
 def fmt_k(v):
     try:
         return f"{int(round(float(v)/1000.0))}k€"
@@ -145,6 +183,7 @@ if not gdf.empty:
         pickable=True,
     )
 
+    # IMPORTANT: deck.gl attend des constantes sous forme de chaînes JSON
     text_layer = pdk.Layer(
         "TextLayer",
         data=gdf,
@@ -152,9 +191,9 @@ if not gdf.empty:
         get_text="price_label",
         get_color=[255, 255, 255, 220],
         get_size=16,
-        get_alignment_baseline="'middle'",
-        get_text_anchor="'left'",
-        get_pixel_offset="[8, 0]",   # décale le texte à droite du point
+        get_text_anchor='"start"',          # au lieu de 'left'
+        get_alignment_baseline='"center"',  # au lieu de 'middle'
+        get_pixel_offset=[8, 0],
     )
 
     st.pydeck_chart(
@@ -171,7 +210,6 @@ else:
 # ------------------ Tableau (numéroté à partir de 1) ------------------
 st.subheader("📋 Tableau")
 
-# réordonne + numérote 1..n
 cols_order = [
     "title", "price_eur", "surface_m2", "price_per_m2",
     "rooms", "city", "zipcode", "latitude", "longitude", "url"
@@ -184,17 +222,16 @@ st.dataframe(
     use_container_width=True,
     hide_index=True,
     column_config={
-        "price_eur":     st.column_config.NumberColumn("prix (€)",    format="%.0f"),
-        "surface_m2":    st.column_config.NumberColumn("surface (m²)",format="%.0f"),
-        "price_per_m2":  st.column_config.NumberColumn("€/m²",        format="%.0f"),
-        "rooms":         st.column_config.NumberColumn("pièces",      format="%.0f"),
-        "zipcode":       st.column_config.NumberColumn("zipcode",     format="%.0f", step=1),
-        "latitude":      st.column_config.NumberColumn("latitude",    format="%.5f"),
-        "longitude":     st.column_config.NumberColumn("longitude",   format="%.5f"),
+        "price_eur":     st.column_config.NumberColumn("prix (€)",     format="%.0f"),
+        "surface_m2":    st.column_config.NumberColumn("surface (m²)", format="%.2f"),
+        "price_per_m2":  st.column_config.NumberColumn("€/m²",         format="%.0f"),
+        "rooms":         st.column_config.NumberColumn("pièces",       format="%.0f"),
+        "zipcode":       st.column_config.NumberColumn("zipcode",      format="%.0f", step=1),
+        "latitude":      st.column_config.NumberColumn("latitude",     format="%.5f"),
+        "longitude":     st.column_config.NumberColumn("longitude",    format="%.5f"),
     },
 )
 
-# ------------------ Liens ------------------
 with st.expander("🔗 Ouvrir les annonces sélectionnées"):
     for _, r in fdf.iterrows():
         url = r.get("url")
