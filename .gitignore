@@ -1,6 +1,26 @@
-# Environnements / caches / IDE
+# Environnements virtuels
 venv/
+.venv/
+env/
+
+# Caches Python
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Fichiers d'IDE/éditeur
 .vscode/
+.idea/
+
+# Devcontainer (VS Code)
 .devcontainer/
+devcontainer.json
+
+# État local Streamlit (facultatif)
+.streamlit/
+
+# Fichiers d'environnement
+.env
+.env.*
+!.env.example
